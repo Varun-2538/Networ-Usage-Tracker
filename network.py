@@ -1,114 +1,147 @@
-
-# NETWORK USAGE TRACKER
-
-# imported necessary library
-from tkinter import *
 import tkinter as tk
+from tkinter import Text, END
 import tkinter.messagebox as mbox
 from PIL import ImageTk, Image
 import time
 import psutil
 import socket
+import mysql.connector
 
-# Main Window & Configuration
-window1 = tk.Tk() # created a tkinter gui window frame
-window1.title("Network Usage Tracker") # title given is "DICTIONARY"
-window1.geometry('1000x700')
+# Connect to MySQL database
+db_connection = mysql.connector.connect(
+    host="Draunzer",
+    user="root",
+    password="12345",
+    database="network_usage"
+)
 
-# top label
-start1 = tk.Label(text = "NETWORK USAGE\nTRACKER", font=("Arial", 55,"underline"), fg="magenta") # same way bg
-start1.place(x = 150, y = 10)
+# Create a cursor object to execute SQL commands
+db_cursor = db_connection.cursor()
 
-def start_fun():
-    window1.destroy()
+# Create a table if it doesn't exist
+db_cursor.execute('''
+    CREATE TABLE IF NOT EXISTS network_usage (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        usage_value FLOAT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+''')
 
-# start button created
-startb = Button(window1, text="START",command=start_fun,font=("Arial", 25), bg = "orange", fg = "blue", borderwidth=3, relief="raised")
-startb.place(x =130 , y =590 )
+# Commit the changes
+db_connection.commit()
 
-# image on the main window
-path = "Images/front.png"
-# Creates a Tkinter-compatible photo image, which can be used everywhere Tkinter expects an image object.
-img1 = ImageTk.PhotoImage(Image.open(path))
-# The Label widget is a standard Tkinter widget used to display a text or image on the screen.
-panel = tk.Label(window1, image = img1)
-panel.place(x = 320, y = 200)
+# Function to insert network usage data into the database
+def insert_network_usage(difference):
+    db_cursor.execute("INSERT INTO network_usage (usage_value) VALUES (%s)", (difference,))
+    db_connection.commit()
 
-# function created for exiting
-def exit_win():
-    if mbox.askokcancel("Exit", "Do you want to exit?"):
-        window1.destroy()
-
-# exit button created
-exitb = Button(window1, text="EXIT",command=exit_win,font=("Arial", 25), bg = "red", fg = "blue", borderwidth=3, relief="raised")
-exitb.place(x =730 , y = 590 )
-window1.protocol("WM_DELETE_WINDOW", exit_win)
-window1.mainloop()
-
-# main window created
-window = Tk()
-window.title("Network Usage Tracker")
-window.geometry("1000x700")
-
-# top label
-top1 = Label(window, text="NETWORK USAGE\nTRACKER", font=("Arial", 50,'underline'), fg="magenta")
-top1.place(x = 190, y = 10)
-
-top1 = Label(window, text="MAX LIMIT  :  1 MB/sec", font=("Arial", 50), fg="green")
-top1.place(x = 130, y = 180)
-
-# text area
-path_text = Text(window, height=1, width=24, font=("Arial", 50), bg="white", fg="blue",borderwidth=2, relief="solid")
-path_text.place(x=50, y = 300)
-
-# l1 = Label(window, fg='blue', font=("Arial", 50))
-# l1.place(x = 80, y = 300)
-
-top1 = Label(window, text="Connection Status :", font=("Arial", 50), fg="green")
-top1.place(x = 200, y = 450)
-
-l2 = Label(window, fg='blue', font=("Arial", 30))
-l2.place(x = 200, y = 530)
-
-def convert_to_gbit(value):
-    return value/1024./1024./1024.*8
-
-# function defined to update the usage instantly
-old_value = 0
+# Function to update the label and insert data into the database
 def update_label():
     global old_value
-    new_value = psutil.net_io_counters().bytes_sent + psutil.net_io_counters().bytes_recv
-    # if old_value:
-    # send_stat(new_value - old_value)
-    x = "{0:.3f}".format(new_value - old_value)
-    # l1.configure(text="")
-    # l1.configure(text= "Usage : " + str(x) + " bytes/sec")
-    path_text.delete("1.0", "end")
-    path_text.insert(END, "Usage : " + str(x) + " bytes/sec")
 
-    # for updating connection status
+    new_value = psutil.net_io_counters().bytes_sent + psutil.net_io_counters().bytes_recv
+    difference = new_value - old_value
+
+    # Insert data into the database
+    insert_network_usage(difference)
+
+    # Display data in the GUI
+    path_text.delete("1.0", "end")
+    path_text.insert(END, "Usage: {:.3f} bytes/sec".format(difference))
+
+    # Update the connection status label
     IPaddress = socket.gethostbyname(socket.gethostname())
     if IPaddress == "127.0.0.1":
         l2.configure(text="No internet, your localhost is\n" + IPaddress)
     else:
         l2.configure(text="Connected, with the IP address\n" + IPaddress)
 
-    # for checking max limit exceeded
-    if(new_value - old_value>1000000):
+    # Check if max limit is exceeded
+    if difference > 10000000000000:
         mbox.showinfo("Exceed Status", "Max Limit Usage Exceeded.")
 
     old_value = new_value
 
-    time.sleep(0.5)
-    window.after(1, update_label)
+# Function to stop the network usage tracking and close the window
+def stop_tracking():
+    window.destroy()
 
-update_label()
+# Function to start the network usage tracking
+def start_tracking():
+    window1.withdraw()  # Use withdraw to hide the window without destroying it
+    global window
+    window = tk.Tk()
+    window.title("Network Usage Tracker")
+    window.geometry("1000x700")
+    window.iconify()
 
+    # top label
+    top1 = tk.Label(window, text="NETWORK USAGE\nTRACKER", font=("Arial", 50, 'underline'), fg="magenta")
+    top1.place(x=190, y=10)
 
-# function for exiting window
-def exit_win():
-    if mbox.askokcancel("Exit", "Do you want to exit?"):
+    top1 = tk.Label(window, text="MAX LIMIT  :  100 MB/sec", font=("Arial", 50), fg="green")
+    top1.place(x=130, y=180)
+
+    # text area
+    global path_text
+    path_text = Text(window, height=1, width=24, font=("Arial", 50), bg="white", fg="blue", borderwidth=2, relief="solid")
+    path_text.place(x=50, y=300)
+
+    # connection status label
+    top1 = tk.Label(window, text="Connection Status :", font=("Arial", 50), fg="green")
+    top1.place(x=200, y=450)
+
+    # label for displaying connection status
+    global l2
+    l2 = tk.Label(window, fg='blue', font=("Arial", 30))
+    l2.place(x=200, y=530)
+
+    # global variable to store the previous network usage value
+    global old_value
+    old_value = 0
+
+    # Function to update the label and insert data into the database
+    def update_label_after_delay():
+        update_label()
+        window.after(1000, update_label_after_delay)
+
+    # Function to stop the network usage tracking and close the window
+    def stop_tracking():
         window.destroy()
 
-window.protocol("WM_DELETE_WINDOW", exit_win)
-window.mainloop()
+    # stop button created
+    stop_button = tk.Button(window, text="STOP", command=stop_tracking, font=("Arial", 25), bg="red", fg="blue",
+                            borderwidth=3, relief="raised")
+    stop_button.place(x=730, y=590)
+
+    window.protocol("WM_DELETE_WINDOW", stop_tracking)
+    window.after(1000, update_label_after_delay)
+    window.mainloop()
+
+# Main Window & Configuration
+window1 = tk.Tk()
+window1.title("Network Usage Tracker")
+window1.geometry('1000x700')
+
+# top label
+start1 = tk.Label(text="NETWORK USAGE\nTRACKER", font=("Arial", 55, "underline"), fg="magenta")
+start1.place(x=150, y=10)
+
+# start button created
+startb = tk.Button(window1, text="START", command=start_tracking, font=("Arial", 25), bg="orange", fg="blue",
+                   borderwidth=3, relief="raised")
+startb.place(x=130, y=590)
+
+# exit button created
+exitb = tk.Button(window1, text="EXIT", command=window1.destroy, font=("Arial", 25), bg="red", fg="blue",
+                  borderwidth=3, relief="raised")
+exitb.place(x=730, y=590)
+
+# image on the main window
+path = "Images/front.png"
+img1 = ImageTk.PhotoImage(Image.open(path))
+panel = tk.Label(window1, image=img1)
+panel.place(x=320, y=200)
+
+window1.protocol("WM_DELETE_WINDOW", window1.destroy)
+window1.mainloop()
