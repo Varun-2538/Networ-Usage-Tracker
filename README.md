@@ -1,7 +1,3 @@
-Certainly! Below is a detailed README file for your Network Usage Tracker application:
-
----
-
 # Network Usage Tracker
 
 The Network Usage Tracker is a Python application with a Tkinter GUI that allows users to monitor real-time network usage, store usage data in a MySQL database, and receive alerts when usage exceeds a predefined maximum limit.
